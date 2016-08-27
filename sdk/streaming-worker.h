@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <nan.h>
+#include <uv.h>
 
 using namespace Nan;
 using namespace std;
@@ -95,6 +96,13 @@ class StreamingWorker : public AsyncProgressWorker {
     input_closed = true;
   }
 
+  virtual bool need_async() const {
+  	return false;
+  }
+  void async_send() {
+  	uv_async_send(&async_);
+  }
+
   PCQueue<Message> fromNode;
 
  protected:
@@ -113,6 +121,7 @@ class StreamingWorker : public AsyncProgressWorker {
   Callback *error_callback;
   PCQueue<Message> toNode;
   bool input_closed;
+  uv_async_t async_;
 
 private:
   void drainQueue() {
@@ -187,6 +196,8 @@ class StreamWorkerWrapper : public Nan::ObjectWrap {
     v8::String::Utf8Value data(info[1]->ToString());
     StreamWorkerWrapper* obj = Nan::ObjectWrap::Unwrap<StreamWorkerWrapper>(info.Holder());
     obj->_worker->fromNode.write(Message(*name, *data));
+    if (obj->_worker->need_async())
+	    obj->_worker->async_send();
   }
 
   static NAN_METHOD(closeInput) {
